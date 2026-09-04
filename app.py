@@ -39,3 +39,12 @@ def get_booking(booking_id: str):
         raise HTTPException(status_code=404, detail="Booking not found")
 
     return booking
+
+def decide_tool(action: str):
+    if action == "get_booking":
+        return "GET /bookings/{booking_id}"
+
+    if action == "create_booking":
+        return "POST /bookings"
+
+    return "UNKNOWN"
