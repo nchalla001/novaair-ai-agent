@@ -48,3 +48,27 @@ def decide_tool(action: str):
         return "POST /bookings"
 
     return "UNKNOWN"
+allowed_actions = {
+    "get_booking",
+    "create_booking"
+}
+
+def is_action_allowed(action: str):
+    return action in allowed_actions
+
+test_cases = [
+    ("get_booking", "GET /bookings/{booking_id}"),
+    ("create_booking", "POST /bookings"),
+    ("cancel_booking", "UNKNOWN"),
+]
+
+for action, expected in test_cases:
+    actual = decide_tool(action)
+
+    if actual == expected:
+        print(f"PASS: {action}")
+    else:
+        print(f"FAIL: {action} -> expected {expected}, got {actual}")
+
+print(is_action_allowed("get_booking"))
+print(is_action_allowed("cancel_booking"))
