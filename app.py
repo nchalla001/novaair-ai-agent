@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from knowledge_base import retrieve_policy
 import uuid
+import re
 
 app = FastAPI()
 
@@ -56,19 +58,44 @@ allowed_actions = {
 def is_action_allowed(action: str):
     return action in allowed_actions
 
-test_cases = [
-    ("get_booking", "GET /bookings/{booking_id}"),
-    ("create_booking", "POST /bookings"),
-    ("cancel_booking", "UNKNOWN"),
-]
+def route_request(message: str):
+    message = message.lower()
 
-for action, expected in test_cases:
-    actual = decide_tool(action)
+    if any(word in message for word in [
+        "baggage",
+        "luggage",
+        "carry-on",
+        "refund policy",
+        "cancellation policy"
+    ]):
+        return "RAG"
 
-    if actual == expected:
-        print(f"PASS: {action}")
-    else:
-        print(f"FAIL: {action} -> expected {expected}, got {actual}")
+    if "booking" in message and any(word in message for word in [
+        "status",
+        "show",
+        "find",
+        "lookup",
+        "check"
+    ]):
+        return "TOOL"
 
-print(is_action_allowed("get_booking"))
-print(is_action_allowed("cancel_booking"))
+    return "UNSUPPORTED"
+
+
+def handle_request(message: str):
+    route = route_request(message)
+
+    if route == "RAG":
+        return retrieve_policy(message)
+
+    if route == "TOOL":
+        booking_match = re.search(r"\bNA\d+\b", message.upper())
+
+        if booking_match is None:
+            return "Please provide a valid NovaAir booking reference."
+
+        booking_id = booking_match.group()
+        return get_booking(booking_id)
+
+    return "This request is outside the supported NovaAir scope."
+
