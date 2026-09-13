@@ -95,7 +95,19 @@ def handle_request(message: str):
             return "Please provide a valid NovaAir booking reference."
 
         booking_id = booking_match.group()
-        return get_booking(booking_id)
+
+        try:
+            return get_booking(booking_id)
+
+        except HTTPException as error:
+            if error.status_code == 404:
+                return f"I couldn't find booking {booking_id}. Please verify the booking reference and try again."
+
+            raise error
+
+        except TimeoutError:
+         return "The booking service is temporarily unavailable. Please try again shortly or contact customer service."
 
     return "This request is outside the supported NovaAir scope."
+
 
