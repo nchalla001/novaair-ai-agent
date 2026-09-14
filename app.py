@@ -58,7 +58,7 @@ allowed_actions = {
 def is_action_allowed(action: str):
     return action in allowed_actions
 
-def route_request(message: str):
+def classify_intent(message: str):
     message = message.lower()
 
     if any(word in message for word in [
@@ -66,11 +66,24 @@ def route_request(message: str):
         "luggage",
         "carry-on",
         "refund policy",
-        "cancellation policy"
+        "cancellation policy",
+        "lost suitcase",
+        "lost baggage",
+        "suitcase",
     ]):
-        return "RAG"
+        return "POLICY_QUESTION"
 
     if "booking" in message or re.search(r"\bNA\d+\b", message.upper()):
+        return "BOOKING_LOOKUP"
+
+    return "UNSUPPORTED"
+def route_request(message: str):
+    intent = classify_intent(message)
+
+    if intent == "POLICY_QUESTION":
+        return "RAG"
+
+    if intent == "BOOKING_LOOKUP":
         return "TOOL"
 
     return "UNSUPPORTED"
@@ -103,6 +116,7 @@ def handle_request(message: str):
          return "The booking service is temporarily unavailable. Please try again shortly or contact customer service."
 
     return "This request is outside the supported NovaAir scope."
+
 
 
 
