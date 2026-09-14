@@ -70,13 +70,7 @@ def route_request(message: str):
     ]):
         return "RAG"
 
-    if "booking" in message and any(word in message for word in [
-        "status",
-        "show",
-        "find",
-        "lookup",
-        "check"
-    ]):
+    if "booking" in message or re.search(r"\bNA\d+\b", message.upper()):
         return "TOOL"
 
     return "UNSUPPORTED"
@@ -109,5 +103,6 @@ def handle_request(message: str):
          return "The booking service is temporarily unavailable. Please try again shortly or contact customer service."
 
     return "This request is outside the supported NovaAir scope."
+
 
 
