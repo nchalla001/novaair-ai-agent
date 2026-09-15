@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from knowledge_base import retrieve_policy
+from knowledge_base import retrieve_policy, model
+from sentence_transformers import util
 import uuid
 import re
 
@@ -58,25 +59,59 @@ allowed_actions = {
 def is_action_allowed(action: str):
     return action in allowed_actions
 
+intent_examples = {
+    "POLICY_QUESTION": [
+        "What is the baggage policy?",
+        "My suitcase never arrived. What should I do?",
+        "What are the cancellation rules?",
+        "Can I get a refund?",
+        "What happens if my checked bag is delayed?",
+    ],
+
+    "BOOKING_LOOKUP": [
+        "Check booking NA123",
+        "Show me my booking status",
+        "Can you tell me about my reservation?",
+        "What is happening with NA456?",
+    ],
+
+    "UNSUPPORTED": [
+        "Who was Augustus?",
+        "Tell me a joke",
+        "What is the weather today?",
+    ]
+}
+
+intent_texts = []
+intent_labels = []
+
+for intent, examples in intent_examples.items():
+    for example in examples:
+        intent_texts.append(example)
+        intent_labels.append(intent)
+
+intent_embeddings = model.encode(
+    intent_texts,
+    convert_to_tensor=True
+)
 def classify_intent(message: str):
-    message = message.lower()
+    message_embedding = model.encode(
+        message,
+        convert_to_tensor=True
+    )
 
-    if any(word in message for word in [
-        "baggage",
-        "luggage",
-        "carry-on",
-        "refund policy",
-        "cancellation policy",
-        "lost suitcase",
-        "lost baggage",
-        "suitcase",
-    ]):
-        return "POLICY_QUESTION"
+    scores = util.cos_sim(
+        message_embedding,
+        intent_embeddings
+    )[0]
 
-    if "booking" in message or re.search(r"\bNA\d+\b", message.upper()):
-        return "BOOKING_LOOKUP"
+    best_match_index = scores.argmax().item()
+    best_match_score = scores[best_match_index].item()
 
-    return "UNSUPPORTED"
+    if best_match_score < 0.30:
+        return "UNSUPPORTED"
+
+    return intent_labels[best_match_index]
 def route_request(message: str):
     intent = classify_intent(message)
 
