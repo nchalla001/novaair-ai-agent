@@ -75,6 +75,13 @@ intent_examples = {
         "What is happening with NA456?",
     ],
 
+    "CANCEL_BOOKING": [
+    "Cancel booking NA123",
+    "I want to cancel my reservation",
+    "Please cancel my flight booking",
+    "I no longer want booking NA456",
+],
+
     "UNSUPPORTED": [
         "Who was Augustus?",
         "Tell me a joke",
@@ -121,6 +128,9 @@ def route_request(message: str):
     if intent == "BOOKING_LOOKUP":
         return "TOOL"
 
+    if intent == "CANCEL_BOOKING":
+        return "CANCEL"
+
     return "UNSUPPORTED"
 
 
@@ -149,7 +159,36 @@ def handle_request(message: str):
 
         except TimeoutError:
          return "The booking service is temporarily unavailable. Please try again shortly or contact customer service."
+    if route == "CANCEL":
+        booking_match = re.search(r"\bNA\d+\b", message.upper())
 
+        if booking_match is None:
+            return "Please provide the NovaAir booking reference you want to cancel."
+
+        booking_id = booking_match.group()
+
+        try:
+            booking = get_booking(booking_id)
+
+        except HTTPException as error:
+            if error.status_code == 404:
+                return f"I couldn't find booking {booking_id}. Please verify the booking reference."
+
+            raise error
+
+        except TimeoutError:
+            return "The booking service is temporarily unavailable. Please try again shortly."
+
+        if not is_action_allowed("cancel_booking"):
+            cancellation_policy = retrieve_policy(
+                "What is the NovaAir cancellation policy?"
+            )
+
+            return {
+                "booking": booking,
+                "message": "I found the booking, but I am not authorized to cancel it automatically. Please contact customer service for assistance.",
+                "policy": cancellation_policy
+            }
     return "This request is outside the supported NovaAir scope."
 
 
