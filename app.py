@@ -4,6 +4,14 @@ from knowledge_base import retrieve_policy, model
 from sentence_transformers import util
 import uuid
 import re
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
+
+logger = logging.getLogger("novaair")
 
 app = FastAPI()
 
@@ -135,7 +143,15 @@ def route_request(message: str):
 
 
 def handle_request(message: str):
+    intent = classify_intent(message)
     route = route_request(message)
+
+    logger.info(
+        "message=%r intent=%s route=%s",
+        message,
+        intent,
+        route
+    )
 
     if route == "RAG":
         return retrieve_policy(message)
@@ -183,6 +199,10 @@ def handle_request(message: str):
             cancellation_policy = retrieve_policy(
                 "What is the NovaAir cancellation policy?"
             )
+            logger.info(
+            "booking=%s guardrail=BLOCKED outcome=ESCALATED",
+            booking_id
+            )
 
             return {
                 "booking": booking,
@@ -190,7 +210,27 @@ def handle_request(message: str):
                 "policy": cancellation_policy
             }
     return "This request is outside the supported NovaAir scope."
+eval_cases = [
+    ("What is the baggage policy?", "POLICY_QUESTION"),
+    ("Show me booking NA123", "BOOKING_LOOKUP"),
+    ("Please cancel booking NA456", "CANCEL_BOOKING"),
+    ("Who was Augustus?", "UNSUPPORTED"),
+    ("Check my booking", "BOOKING_LOOKUP"),
+    ("Please cancel my booking", "CANCEL_BOOKING"),
+    ("My suitcase never arrived", "POLICY_QUESTION"),
+    ("Tell me something interesting", "UNSUPPORTED"),
+]
 
+for message, expected_intent in eval_cases:
+    actual_intent = classify_intent(message)
+
+    if actual_intent == expected_intent:
+        print(f"PASS: {message}")
+    else:
+        print(
+            f"FAIL: {message} -> "
+            f"expected {expected_intent}, got {actual_intent}"
+        )
 
 
 
