@@ -34,6 +34,10 @@ bookings = {
     }
 }
 
+conversation_state: dict[str, str | None] = {
+    "current_booking_id": None
+}
+
 @app.post("/bookings")
 def create_booking(booking: BookingRequest):
     booking_id = f"NA-{uuid.uuid4()}"
@@ -120,7 +124,7 @@ def classify_intent(message: str):
         intent_embeddings
     )[0]
 
-    best_match_index = scores.argmax().item()
+    best_match_index = int(scores.argmax().item())
     best_match_score = scores[best_match_index].item()
 
     if best_match_score < 0.30:
@@ -165,7 +169,11 @@ def handle_request(message: str):
         booking_id = booking_match.group()
 
         try:
-            return get_booking(booking_id)
+            booking = get_booking(booking_id)
+
+            conversation_state["current_booking_id"] = booking_id
+
+            return booking
 
         except HTTPException as error:
             if error.status_code == 404:
@@ -176,12 +184,16 @@ def handle_request(message: str):
         except TimeoutError:
          return "The booking service is temporarily unavailable. Please try again shortly or contact customer service."
     if route == "CANCEL":
+        
         booking_match = re.search(r"\bNA\d+\b", message.upper())
 
-        if booking_match is None:
-            return "Please provide the NovaAir booking reference you want to cancel."
+        if booking_match is not None:
+            booking_id = booking_match.group()
+        else:
+            booking_id = conversation_state["current_booking_id"]
 
-        booking_id = booking_match.group()
+            if booking_id is None:
+                return "Please provide the NovaAir booking reference you want to cancel."
 
         try:
             booking = get_booking(booking_id)
@@ -231,6 +243,12 @@ for message, expected_intent in eval_cases:
             f"FAIL: {message} -> "
             f"expected {expected_intent}, got {actual_intent}"
         )
+conversation_state["current_booking_id"] = None
 
+print("TURN 1:", handle_request("Check booking NA456"))
+print("STATE:", conversation_state)
+print("TURN 2:", handle_request("Cancel it"))
+conversation_state["current_booking_id"] = None
 
+print("NO STATE:", handle_request("Cancel it"))
 
