@@ -5,6 +5,7 @@ from sentence_transformers import util
 import uuid
 import re
 import logging
+import sqlite3
 
 logging.basicConfig(
     level=logging.INFO,
@@ -14,6 +15,41 @@ logging.basicConfig(
 logger = logging.getLogger("novaair")
 
 app = FastAPI()
+
+def init_db():
+    connection = sqlite3.connect("novaair.db")
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bookings (
+            booking_id TEXT PRIMARY KEY,
+            passenger TEXT NOT NULL,
+            flight TEXT NOT NULL,
+            status TEXT NOT NULL
+        )
+    """)
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO bookings
+        (booking_id, passenger, flight, status)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("NA123", "Marcus", "NV101", "CANCELLED")
+    )
+
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO bookings
+        (booking_id, passenger, flight, status)
+        VALUES (?, ?, ?, ?)
+        """,
+        ("NA456", "Livia", "NV202", "CONFIRMED")
+    )
+    connection.commit()
+    connection.close()
+
+
+init_db()
 
 class BookingRequest(BaseModel):
     passenger: str
@@ -41,19 +77,56 @@ conversation_state: dict[str, str | None] = {
 @app.post("/bookings")
 def create_booking(booking: BookingRequest):
     booking_id = f"NA-{uuid.uuid4()}"
-    bookings[booking_id] = booking.model_dump()
+
+    connection = sqlite3.connect("novaair.db")
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO bookings
+        (booking_id, passenger, flight, status)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            booking_id,
+            booking.passenger,
+            booking.flight,
+            booking.status
+        )
+    )
+
+    connection.commit()
+    connection.close()
+
     return {
-    "booking_id": booking_id,
-    **booking.model_dump()
-}
+        "booking_id": booking_id,
+        **booking.model_dump()
+    }
 @app.get("/bookings/{booking_id}")
 def get_booking(booking_id: str):
-    booking = bookings.get(booking_id)
+    connection = sqlite3.connect("novaair.db")
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT passenger, flight, status
+        FROM bookings
+        WHERE booking_id = ? COLLATE NOCASE
+        """,
+        (booking_id,)
+    )
+
+    booking = cursor.fetchone()
+    connection.close()
 
     if booking is None:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    return booking
+    return {
+        "passenger": booking[0],
+        "flight": booking[1],
+        "status": booking[2]
+    }
 
 def decide_tool(action: str):
     if action == "get_booking":
@@ -161,7 +234,7 @@ def handle_request(message: str):
         return retrieve_policy(message)
 
     if route == "TOOL":
-        booking_match = re.search(r"\bNA\d+\b", message.upper())
+        booking_match = re.search(r"\bNA(?:\d+|-[A-Z0-9-]+)\b", message.upper())
 
         if booking_match is None:
             return "Please provide a valid NovaAir booking reference."
@@ -185,7 +258,7 @@ def handle_request(message: str):
          return "The booking service is temporarily unavailable. Please try again shortly or contact customer service."
     if route == "CANCEL":
         
-        booking_match = re.search(r"\bNA\d+\b", message.upper())
+        booking_match = re.search(r"\bNA(?:\d+|-[A-Z0-9-]+)\b", message.upper())
 
         if booking_match is not None:
             booking_id = booking_match.group()
@@ -243,12 +316,3 @@ for message, expected_intent in eval_cases:
             f"FAIL: {message} -> "
             f"expected {expected_intent}, got {actual_intent}"
         )
-conversation_state["current_booking_id"] = None
-
-print("TURN 1:", handle_request("Check booking NA456"))
-print("STATE:", conversation_state)
-print("TURN 2:", handle_request("Cancel it"))
-conversation_state["current_booking_id"] = None
-
-print("NO STATE:", handle_request("Cancel it"))
-
